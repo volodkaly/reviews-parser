@@ -56,16 +56,28 @@ class ParseReviews extends Command
             // 2. Всі картинки всередині контейнера
             $imgElements = $reviewsContainer->findElements(WebDriverBy::cssSelector('img'));
             $imgUrls = [];
+            $ratings = [];
 
             foreach ($imgElements as $img) {
+                // URL картинки
                 $src = $img->getAttribute('src');
                 if ($src) {
                     $imgUrls[] = $src;
                 }
+
+                // Якщо в alt є "Rated", вважаємо це рейтингом
+                $alt = $img->getAttribute('alt');
+                if ($alt && str_contains($alt, 'Rated')) {
+                    $ratings[] = $alt; // наприклад "Rated 4 out of 5 stars"
+                }
             }
 
             // 3. Формуємо запис у файл
-            $content = $reviewsText . "\n\nImages:\n" . implode("\n", $imgUrls) . "\n\n---\n\n";
+            $content = $reviewsText
+                . "\n\nImages:\n" . implode("\n", $imgUrls)
+                . "\n\nRatings:\n" . implode("\n", $ratings)
+                . "\n\n---\n\n";
+
             file_put_contents($filePath, $content, FILE_APPEND);
 
             $pages++;
