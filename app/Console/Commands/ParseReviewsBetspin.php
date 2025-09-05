@@ -30,14 +30,16 @@ class ParseReviewsBetspin extends Command
         $driver->get('https://www.trustpilot.com/review/bitspin365.com');
 
         // 4. Підготовка файлу для збереження
-        $filePath = storage_path('bitspin_reviews_all.txt');
+        $filePath = storage_path('betspin_reviews_all.txt');
         file_put_contents($filePath, ""); // очищаємо файл перед записом
 
-        $hasNext = true;
         $pages = 0;
-        $maxPages = 10; // ліміт на кількість сторінок
+        $maxPages = 50;
 
+        $extraIteration = false;
         do {
+            $reviewsText = '';
+
             // 5. Чекаємо, поки відгуки завантажаться
             $driver->wait(3)->until(
                 WebDriverExpectedCondition::presenceOfElementLocated(
@@ -45,43 +47,43 @@ class ParseReviewsBetspin extends Command
                 )
             );
 
-            // 6. Отримуємо текст відгуків на поточній сторінці
-            $reviewsContainer = $driver->findElement(
-                WebDriverBy::cssSelector('section.styles_reviewListContainer__2bg_p')
-            );
+            // 6. Отримуємо контейнер відгуків
+
 
             // 1. Текст усіх відгуків
-            $reviewsText = $reviewsContainer->getText();
 
-            // 2. Всі аватарки всередині контейнера
+
+            // 2. Всі аватарки та рейтинги
             $imgUrls = [];
             $ratings = [];
 
             try {
-                // Знаходимо всі аватарні контейнери (і з картинками, і без)
-                $avatarElements = $reviewsContainer->findElements(WebDriverBy::cssSelector('[data-testid="consumer-avatar"]'));
+                //text
+                $reviewsContainer = $driver->findElement(
+                    WebDriverBy::cssSelector('section.styles_reviewListContainer__2bg_p')
+                );
+                $reviewsText = $reviewsContainer->getText();
+
+                $avatarElements = $reviewsContainer->findElements(
+                    WebDriverBy::cssSelector('[data-testid="consumer-avatar"]')
+                );
 
                 foreach ($avatarElements as $avatar) {
                     try {
-                        // Пробуємо знайти картинку всередині аватарного контейнера
                         $imgInside = $avatar->findElements(WebDriverBy::cssSelector('img'));
 
                         if (count($imgInside) > 0) {
-                            // Якщо картинка є — беремо її src
                             $src = $imgInside[0]->getAttribute('src');
                             $imgUrls[] = $src && str_contains($src, 'png') ? $src : 'no avatar image';
                         } else {
-                            // Якщо немає картинки — явно пишемо, що немає
                             $imgUrls[] = 'no avatar image';
                         }
-
                     } catch (\Facebook\WebDriver\Exception\StaleElementReferenceException $e) {
                         $imgUrls[] = 'no avatar image';
                         continue;
                     }
                 }
 
-                // Далі збираємо рейтинги як раніше
                 $imgElements = $reviewsContainer->findElements(WebDriverBy::cssSelector('img'));
                 foreach ($imgElements as $img) {
                     try {
@@ -101,49 +103,55 @@ class ParseReviewsBetspin extends Command
             $content = $reviewsText
                 . "\n\nImages:\n" . implode("\n", $imgUrls)
                 . "\n\nRatings:\n" . implode("\n", $ratings)
-                . "\n\n***End_of_page***\n\n";
+                . "\n\n***End_of_page_$pages***\n\n";
 
             file_put_contents($filePath, $content, FILE_APPEND);
 
             $pages++;
             $this->info("Обробляю сторінку $pages...");
+
+            // Перевірка обмеження по сторінках
             if ($pages >= $maxPages) {
-                $hasNext = false;
                 break;
             }
 
-            // 7. Стабільний клік на "Next" з обробкою StaleElement
+            // 7. Перевіряємо кнопку "Next"
             try {
                 $nextButton = $driver->findElement(
                     WebDriverBy::cssSelector('a[data-pagination-name="pagination-button-next"]')
                 );
 
-                if ($nextButton->isDisplayed() && $nextButton->isEnabled()) {
-                    // Сховати банер
-                    $driver->executeScript("
-            let banner = document.querySelector('.onetrust-pc-dark-filter');
-            if (banner) { banner.style.display = 'none'; }
-        ");
+                $disabledAttr = $nextButton->getAttribute('aria-disabled');
 
-                    // Прокрутка і клік через JS
-                    $driver->executeScript("arguments[0].scrollIntoView(true);", [$nextButton]);
-                    sleep(1);
-                    $driver->executeScript("arguments[0].click();", [$nextButton]);
 
-                    sleep(2); // чекаємо нові відгуки
-                    $hasNext = true;
-                } else {
-                    $hasNext = false;
+                if ($disabledAttr === 'true') {
+                    if ($extraIteration) {
+                        break; // друга ітерація вже була — виходимо
+                    }
+
+                    $extraIteration = true;
                 }
-            } catch (\Facebook\WebDriver\Exception\StaleElementReferenceException $e) {
-                sleep(1);
-                continue;
+                // Прибираємо банер, якщо є
+                $driver->executeScript("
+                    let banner = document.querySelector('.onetrust-pc-dark-filter');
+                    if (banner) { banner.style.display = 'none'; }
+                ");
+
+                // Скролимо до кнопки і клікаємо
+                $driver->executeScript("arguments[0].scrollIntoView(true);", [$nextButton]);
+                sleep(0.1);
+                $driver->executeScript("arguments[0].click();", [$nextButton]);
+
+                sleep(0.1);
+
             } catch (\Facebook\WebDriver\Exception\NoSuchElementException $e) {
-                $hasNext = false;
+                break;
+            } catch (\Facebook\WebDriver\Exception\StaleElementReferenceException $e) {
+                sleep(0.1);
+                continue;
             }
 
-
-        } while ($hasNext);
+        } while (true);
 
         $this->info("Зібрано $pages сторінок відгуків. Дані збережено у файл: $filePath");
 

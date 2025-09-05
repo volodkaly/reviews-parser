@@ -35,7 +35,7 @@ class ParseReviewsBlockbets extends Command
 
         $hasNext = true;
         $pages = 0;
-        $maxPages = 4; // ліміт на кількість сторінок
+        $maxPages = 1000; // ліміт на кількість сторінок
 
         do {
             // 5. Чекаємо, поки відгуки завантажаться
@@ -127,16 +127,16 @@ class ParseReviewsBlockbets extends Command
 
                     // Прокрутка і клік через JS
                     $driver->executeScript("arguments[0].scrollIntoView(true);", [$nextButton]);
-                    sleep(1);
+                    sleep(0.1);
                     $driver->executeScript("arguments[0].click();", [$nextButton]);
 
-                    sleep(2); // чекаємо нові відгуки
+                    sleep(0.1); // чекаємо нові відгуки
                     $hasNext = true;
                 } else {
                     $hasNext = false;
                 }
             } catch (\Facebook\WebDriver\Exception\StaleElementReferenceException $e) {
-                sleep(1);
+                sleep(0.1);
                 continue;
             } catch (\Facebook\WebDriver\Exception\NoSuchElementException $e) {
                 $hasNext = false;

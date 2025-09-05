@@ -35,7 +35,7 @@ class ParseReviewsAstropay extends Command
 
         $hasNext = true;
         $pages = 0;
-        $maxPages = 4; // ліміт на кількість сторінок
+        $maxPages = 10000; // ліміт на кількість сторінок
 
         do {
             // 5. Чекаємо, поки відгуки завантажаться
@@ -118,7 +118,9 @@ class ParseReviewsAstropay extends Command
                     WebDriverBy::cssSelector('a[data-pagination-name="pagination-button-next"]')
                 );
 
-                if ($nextButton->isDisplayed() && $nextButton->isEnabled()) {
+                $disabledAttr = $nextButton->getAttribute('aria-disabled');
+
+                if (!$disabledAttr) {
                     // Сховати банер
                     $driver->executeScript("
             let banner = document.querySelector('.onetrust-pc-dark-filter');
@@ -127,16 +129,16 @@ class ParseReviewsAstropay extends Command
 
                     // Прокрутка і клік через JS
                     $driver->executeScript("arguments[0].scrollIntoView(true);", [$nextButton]);
-                    sleep(1);
+                    sleep(0.1);
                     $driver->executeScript("arguments[0].click();", [$nextButton]);
 
-                    sleep(2); // чекаємо нові відгуки
+                    sleep(0.1); // чекаємо нові відгуки
                     $hasNext = true;
                 } else {
                     $hasNext = false;
                 }
             } catch (\Facebook\WebDriver\Exception\StaleElementReferenceException $e) {
-                sleep(1);
+                sleep(0.1);
                 continue;
             } catch (\Facebook\WebDriver\Exception\NoSuchElementException $e) {
                 $hasNext = false;
