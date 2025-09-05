@@ -61,7 +61,7 @@ class ParseReviews extends Command
             foreach ($imgElements as $img) {
                 // URL картинки
                 $src = $img->getAttribute('src');
-                if ($src) {
+                if ($src && str_contains($src, 'png')) {
                     $imgUrls[] = $src;
                 }
 
@@ -76,7 +76,7 @@ class ParseReviews extends Command
             $content = $reviewsText
                 . "\n\nImages:\n" . implode("\n", $imgUrls)
                 . "\n\nRatings:\n" . implode("\n", $ratings)
-                . "\n\n---\n\n";
+                . "\n\n***End_of_page***\n\n";
 
             file_put_contents($filePath, $content, FILE_APPEND);
 
