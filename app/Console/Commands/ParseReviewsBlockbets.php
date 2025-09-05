@@ -9,10 +9,10 @@ use Facebook\WebDriver\Remote\DesiredCapabilities;
 use Facebook\WebDriver\WebDriverBy;
 use Facebook\WebDriver\WebDriverExpectedCondition;
 
-class ParseReviews extends Command
+class ParseReviewsBlockbets extends Command
 {
-    protected $signature = 'parse:astropay';
-    protected $description = 'Get up to 100 pages of reviews from Astropay Trustpilot and save to a file';
+    protected $signature = 'parse:blockbets';
+    protected $description = 'Parsing reviews from Blockbets Trustpilot and save to a file';
 
     public function handle()
     {
@@ -30,12 +30,12 @@ class ParseReviews extends Command
         $driver->get('https://www.trustpilot.com/review/app.astropay.com');
 
         // 4. Підготовка файлу для збереження
-        $filePath = storage_path('astropay_reviews_all.txt');
+        $filePath = storage_path('blockbets_reviews_all.txt');
         file_put_contents($filePath, ""); // очищаємо файл перед записом
 
         $hasNext = true;
         $pages = 0;
-        $maxPages = 100; // ліміт на 10 сторінок
+        $maxPages = 4; // ліміт на кількість сторінок
 
         do {
             // 5. Чекаємо, поки відгуки завантажаться
@@ -49,10 +49,45 @@ class ParseReviews extends Command
             $reviewsContainer = $driver->findElement(
                 WebDriverBy::cssSelector('section.styles_reviewListContainer__2bg_p')
             );
+
+            // 1. Текст усіх відгуків
             $reviewsText = $reviewsContainer->getText();
-            file_put_contents($filePath, $reviewsText . "\n\n---\n\n", FILE_APPEND);
+
+            // 2. Всі картинки всередині контейнера
+            $imgUrls = [];
+            $ratings = [];
+
+            try {
+                $imgElements = $reviewsContainer->findElements(WebDriverBy::cssSelector('img'));
+                foreach ($imgElements as $img) {
+                    try {
+                        $src = $img->getAttribute('src');
+                        if ($src && str_contains($src, 'png')) {
+                            $imgUrls[] = $src;
+                        }
+
+                        $alt = $img->getAttribute('alt');
+                        if ($alt && str_contains($alt, 'Rated')) {
+                            $ratings[] = $alt;
+                        }
+                    } catch (\Facebook\WebDriver\Exception\StaleElementReferenceException $e) {
+                        continue; // якщо елемент став stale — пропускаємо
+                    }
+                }
+            } catch (\Facebook\WebDriver\Exception\StaleElementReferenceException $e) {
+                // якщо контейнер став stale — можна перепочати цикл
+                continue;
+            }
+            // 3. Формуємо запис у файл
+            $content = $reviewsText
+                . "\n\nImages:\n" . implode("\n", $imgUrls)
+                . "\n\nRatings:\n" . implode("\n", $ratings)
+                . "\n\n***End_of_page***\n\n";
+
+            file_put_contents($filePath, $content, FILE_APPEND);
 
             $pages++;
+            $this->info("Обробляю сторінку $pages...");
             if ($pages >= $maxPages) {
                 $hasNext = false;
                 break;
