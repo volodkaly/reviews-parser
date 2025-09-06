@@ -149,7 +149,7 @@ class ParseReviewsBitspin extends Command
             } catch (\Facebook\WebDriver\Exception\NoSuchElementException $e) {
                 break;
             } catch (\Facebook\WebDriver\Exception\StaleElementReferenceException $e) {
-                $this->info("Якась помилочка: " . $e->getMessage());
+
                 continue;
             }
 

@@ -12,7 +12,7 @@ use Facebook\WebDriver\WebDriverExpectedCondition;
 class ParseReviewsWg extends Command
 {
     protected $signature = 'parse:wg';
-    protected $description = 'Get up to 100 pages of reviews from Astropay Trustpilot and save to a file';
+    protected $description = 'Parsing reviews from Wg Trustpilot and save to a file';
 
     public function handle()
     {
@@ -33,11 +33,13 @@ class ParseReviewsWg extends Command
         $filePath = storage_path('wg_reviews_all.txt');
         file_put_contents($filePath, ""); // очищаємо файл перед записом
 
-        $hasNext = true;
         $pages = 0;
-        $maxPages = 1000; // ліміт кількість сторінок
+        $maxPages = 10000;
+
 
         do {
+            $reviewsText = '';
+
             // 5. Чекаємо, поки відгуки завантажаться
             $driver->wait(3)->until(
                 WebDriverExpectedCondition::presenceOfElementLocated(
@@ -45,51 +47,113 @@ class ParseReviewsWg extends Command
                 )
             );
 
-            // 6. Отримуємо текст відгуків на поточній сторінці
-            $reviewsContainer = $driver->findElement(
-                WebDriverBy::cssSelector('section.styles_reviewListContainer__2bg_p')
-            );
-            $reviewsText = $reviewsContainer->getText();
-            file_put_contents($filePath, $reviewsText . "\n\n---\n\n", FILE_APPEND);
+            //Всі аватарки та рейтинги
+            $imgUrls = [];
+            $ratings = [];
+
+            try {
+                //Текст усіх відгуків
+                $reviewsContainer = $driver->findElement(
+                    WebDriverBy::cssSelector('section.styles_reviewListContainer__2bg_p')
+                );
+                $reviewsText = $reviewsContainer->getText();
+
+                $avatarElements = $reviewsContainer->findElements(
+                    WebDriverBy::cssSelector('[data-testid="consumer-avatar"]')
+                );
+
+                foreach ($avatarElements as $avatar) {
+                    try {
+                        $imgInside = $avatar->findElements(WebDriverBy::cssSelector('img'));
+
+                        if (count($imgInside) > 0) {
+                            $src = $imgInside[0]->getAttribute('src');
+                            $imgUrls[] = $src && str_contains($src, 'png') ? $src : 'no avatar image';
+                        } else {
+                            $imgUrls[] = 'no avatar image';
+                        }
+                    } catch (\Facebook\WebDriver\Exception\StaleElementReferenceException $e) {
+                        $imgUrls[] = 'no avatar image';
+                        continue;
+                    }
+                }
+
+                $imgElements = $reviewsContainer->findElements(WebDriverBy::cssSelector('img'));
+                foreach ($imgElements as $img) {
+                    try {
+                        $rate = $img->getAttribute('src');
+                        if ($rate && str_contains($rate, 'star') && str_contains($rate, 'svg')) {
+                            $ratings[] = $rate;
+                        }
+                    } catch (\Facebook\WebDriver\Exception\StaleElementReferenceException $e) {
+                        $this->info("не знайдено рейтинг");
+                        continue;
+                    }
+                }
+            } catch (\Facebook\WebDriver\Exception\StaleElementReferenceException $e) {
+                $this->info("щось не знайдено");
+                continue;
+            }
+
+            // 3. Формуємо запис у файл
+            $content = $reviewsText
+                . "\n\nImages:\n" . implode("\n", $imgUrls)
+                . "\n\nRatings:\n" . implode("\n", $ratings)
+                . "\n\n***End_of_page_$pages***\n\n";
+
+            file_put_contents($filePath, $content, FILE_APPEND);
 
             $pages++;
+            $this->info("Обробляю сторінку $pages...");
+
+            // Перевірка обмеження по сторінках
             if ($pages >= $maxPages) {
-                $hasNext = false;
                 break;
             }
 
-            // 7. Стабільний клік на "Next" з обробкою StaleElement
+            // 7. Перевіряємо кнопку "Next"
             try {
                 $nextButton = $driver->findElement(
                     WebDriverBy::cssSelector('a[data-pagination-name="pagination-button-next"]')
                 );
 
-                if ($nextButton->isDisplayed() && $nextButton->isEnabled()) {
-                    // Сховати банер
-                    $driver->executeScript("
-            let banner = document.querySelector('.onetrust-pc-dark-filter');
-            if (banner) { banner.style.display = 'none'; }
-        ");
+                $disabledAttr = $nextButton->getAttribute('aria-disabled');
 
-                    // Прокрутка і клік через JS
-                    $driver->executeScript("arguments[0].scrollIntoView(true);", [$nextButton]);
-                    sleep(0.1);
-                    $driver->executeScript("arguments[0].click();", [$nextButton]);
 
-                    sleep(0.1); // чекаємо нові відгуки
-                    $hasNext = true;
-                } else {
-                    $hasNext = false;
+                if ($disabledAttr === 'true') {
+
+                    break; // друга ітерація вже була — виходимо
+
+
+
                 }
-            } catch (\Facebook\WebDriver\Exception\StaleElementReferenceException $e) {
-                sleep(0.1);
-                continue;
+                // Прибираємо банер, якщо є
+                $driver->executeScript("
+                    let banner = document.querySelector('.onetrust-pc-dark-filter');
+                    if (banner) { banner.style.display = 'none'; }
+                ");
+
+                // Скролимо до кнопки і клікаємо
+                $driver->executeScript("arguments[0].scrollIntoView(true);", [$nextButton]);
+                sleep(3);
+                $driver->executeScript("arguments[0].click();", [$nextButton]);
+
+                sleep(3);
+
+                $driver->wait(5)->until(
+                    WebDriverExpectedCondition::presenceOfAllElementsLocatedBy(
+                        WebDriverBy::cssSelector('img[src*="stars"]')
+                    )
+                );
+
             } catch (\Facebook\WebDriver\Exception\NoSuchElementException $e) {
-                $hasNext = false;
+                break;
+            } catch (\Facebook\WebDriver\Exception\StaleElementReferenceException $e) {
+
+                continue;
             }
 
-
-        } while ($hasNext && $nextButton);
+        } while (true);
 
         $this->info("Зібрано $pages сторінок відгуків. Дані збережено у файл: $filePath");
 
