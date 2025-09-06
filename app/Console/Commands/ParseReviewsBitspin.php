@@ -34,7 +34,7 @@ class ParseReviewsBitspin extends Command
         file_put_contents($filePath, ""); // очищаємо файл перед записом
 
         $pages = 0;
-        $maxPages = 50;
+        $maxPages = 10000;
 
 
         do {
