@@ -9,9 +9,9 @@ use Facebook\WebDriver\Remote\DesiredCapabilities;
 use Facebook\WebDriver\WebDriverBy;
 use Facebook\WebDriver\WebDriverExpectedCondition;
 
-class ParseReviewsBetspin extends Command
+class ParseReviewsBitspin extends Command
 {
-    protected $signature = 'parse:betspin';
+    protected $signature = 'parse:bitspin';
     protected $description = 'Parsing reviews from Betspin Trustpilot and save to a file';
 
     public function handle()
@@ -30,13 +30,13 @@ class ParseReviewsBetspin extends Command
         $driver->get('https://www.trustpilot.com/review/bitspin365.com');
 
         // 4. Підготовка файлу для збереження
-        $filePath = storage_path('betspin_reviews_all.txt');
+        $filePath = storage_path('bitspin_reviews_all.txt');
         file_put_contents($filePath, ""); // очищаємо файл перед записом
 
         $pages = 0;
         $maxPages = 50;
 
-        $extraIteration = false;
+
         do {
             $reviewsText = '';
 
@@ -50,15 +50,15 @@ class ParseReviewsBetspin extends Command
             // 6. Отримуємо контейнер відгуків
 
 
-            // 1. Текст усіх відгуків
 
 
-            // 2. Всі аватарки та рейтинги
+
+            //Всі аватарки та рейтинги
             $imgUrls = [];
             $ratings = [];
 
             try {
-                //text
+                //Текст усіх відгуків
                 $reviewsContainer = $driver->findElement(
                     WebDriverBy::cssSelector('section.styles_reviewListContainer__2bg_p')
                 );
@@ -87,15 +87,17 @@ class ParseReviewsBetspin extends Command
                 $imgElements = $reviewsContainer->findElements(WebDriverBy::cssSelector('img'));
                 foreach ($imgElements as $img) {
                     try {
-                        $alt = $img->getAttribute('alt');
-                        if ($alt && str_contains($alt, 'Rated')) {
-                            $ratings[] = $alt;
+                        $rate = $img->getAttribute('src');
+                        if ($rate && str_contains($rate, 'star') && str_contains($rate, 'svg')) {
+                            $ratings[] = $rate;
                         }
                     } catch (\Facebook\WebDriver\Exception\StaleElementReferenceException $e) {
+                        $this->info("не знайдено рейтинг");
                         continue;
                     }
                 }
             } catch (\Facebook\WebDriver\Exception\StaleElementReferenceException $e) {
+                $this->info("щось не знайдено");
                 continue;
             }
 
@@ -125,11 +127,11 @@ class ParseReviewsBetspin extends Command
 
 
                 if ($disabledAttr === 'true') {
-                    if ($extraIteration) {
-                        break; // друга ітерація вже була — виходимо
-                    }
 
-                    $extraIteration = true;
+                    break; // друга ітерація вже була — виходимо
+
+
+
                 }
                 // Прибираємо банер, якщо є
                 $driver->executeScript("
@@ -139,15 +141,21 @@ class ParseReviewsBetspin extends Command
 
                 // Скролимо до кнопки і клікаємо
                 $driver->executeScript("arguments[0].scrollIntoView(true);", [$nextButton]);
-                sleep(0.1);
+                sleep(3);
                 $driver->executeScript("arguments[0].click();", [$nextButton]);
 
-                sleep(0.1);
+                sleep(3);
+
+                $driver->wait(5)->until(
+                    WebDriverExpectedCondition::presenceOfAllElementsLocatedBy(
+                        WebDriverBy::cssSelector('img[src*="stars"]')
+                    )
+                );
 
             } catch (\Facebook\WebDriver\Exception\NoSuchElementException $e) {
                 break;
             } catch (\Facebook\WebDriver\Exception\StaleElementReferenceException $e) {
-                sleep(0.1);
+                $this->info("Якась помилочка: " . $e->getMessage());
                 continue;
             }
 
