@@ -47,12 +47,6 @@ class ParseReviewsBitspin extends Command
                 )
             );
 
-            // 6. Отримуємо контейнер відгуків
-
-
-
-
-
             //Всі аватарки та рейтинги
             $imgUrls = [];
             $ratings = [];
